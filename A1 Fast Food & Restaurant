@@ -1,0 +1,508 @@
+package com.ankit.a1fastfoodapp;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.os.Handler;
+import android.widget.TextView;
+import androidx.appcompat.app.AppCompatActivity;
+
+public class SplashActivity extends AppCompatActivity {
+    
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_splash);
+        
+        // FSSAI License Details दिखाएं
+        TextView tvLicense = findViewById(R.id.tvLicense);
+        tvLicense.setText(
+            "🍔 A1 Fast Food & Restaurant\n\n" +
+            "📋 FSSAI LICENSE DETAILS\n" +
+            "─────────────────\n" +
+            "FBO Name: Ankit Chauhan\n" +
+            "Reg No: 22726266000033\n" +
+            "Issued Under: FSS Act, 2006\n" +
+            "Issued By: Food Safety Dept, UP\n" +
+            "Issued On: 06-02-2026\n" +
+            "Valid Upto: 05-02-2027\n\n" +
+            "📍 Address:\n" +
+            "Ekla Aam Chowraha, Bhatni Rd,\n" +
+            "Alawatpur, Mayapur,\n" +
+            "Deoria, UP - 274701\n\n" +
+            "⚡ Petty Retailer - Snacks / Tea Shop"
+        );
+        
+        // 3 सेकंड बाद Login Page खुलेगा
+        new Handler().postDelayed(() -> {
+            startActivity(new Intent(SplashActivity.this, LoginActivity.class));
+            finish();
+        }, 3000);
+    }
+}
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/dark_background"
+    android:padding="16dp"
+    android:gravity="center">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🍽️ A1 Fast Food"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="@color/orange"
+        android:layout_marginBottom="20dp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:background="@android:color/white"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/tvLicense"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="@color/black"
+            android:lineSpacingExtra="4dp" />
+    </ScrollView>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Loading..."
+        android:textSize="16sp"
+        android:textColor="@color/white"
+        android:layout_marginTop="20dp" />
+
+</LinearLayout>
+package com.ankit.a1fastfoodapp;
+
+import android.Manifest;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationManager;
+import android.widget.Toast;
+import androidx.core.app.ActivityCompat;
+
+public class LocationHelper {
+    
+    private static final double SHOP_LATITUDE = 26.123456;  // अपने Shop के Latitude डालें
+    private static final double SHOP_LONGITUDE = 83.123456; // अपने Shop के Longitude डालें
+    private static final int MAX_DISTANCE_METERS = 50; // 50 मीटर
+    
+    private Context context;
+    
+    public LocationHelper(Context context) {
+        this.context = context;
+    }
+    
+    public boolean isWithinShopArea() {
+        LocationManager locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) 
+                != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
+        
+        Location lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        
+        if (lastKnownLocation == null) {
+            lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+        }
+        
+        if (lastKnownLocation != null) {
+            float[] results = new float[1];
+            Location.distanceBetween(
+                SHOP_LATITUDE, SHOP_LONGITUDE,
+                lastKnownLocation.getLatitude(), lastKnownLocation.getLongitude(),
+                results
+            );
+            
+            return results[0] <= MAX_DISTANCE_METERS;
+        }
+        
+        return false;
+    }
+    
+    public void checkLocationAndProceed(Runnable onSuccess, Runnable onFailure) {
+        if (isWithinShopArea()) {
+            onSuccess.run();
+        } else {
+            Toast.makeText(context, 
+                "❌ आप Shop से 50 मीटर दूर हैं! ऑर्डर केवल Shop के पास से ही कर सकते हैं।", 
+                Toast.LENGTH_LONG).show();
+            onFailure.run();
+        }
+    }
+}
+package com.ankit.a1fastfoodapp;
+
+import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Map;
+
+public class VerificationHelper {
+    
+    private static Map<String, OrderVerification> activeVerifications = new HashMap<>();
+    private static SecureRandom random = new SecureRandom();
+    
+    public static class OrderVerification {
+        public String orderId;
+        public String code;
+        public long expiryTime;
+        public boolean isVerified;
+        
+        public OrderVerification(String orderId) {
+            this.orderId = orderId;
+            this.code = generateCode();
+            this.expiryTime = System.currentTimeMillis() + (5 * 60 * 1000); // 5 minutes
+            this.isVerified = false;
+        }
+        
+        private String generateCode() {
+            int code = 100000 + random.nextInt(900000); // 6-digit code
+            return String.valueOf(code);
+        }
+        
+        public boolean isValid() {
+            return !isVerified && System.currentTimeMillis() < expiryTime;
+        }
+    }
+    
+    public static String createVerification(String orderId) {
+        OrderVerification verification = new OrderVerification(orderId);
+        activeVerifications.put(orderId, verification);
+        return verification.code;
+    }
+    
+    public static boolean verifyCode(String orderId, String code) {
+        OrderVerification verification = activeVerifications.get(orderId);
+        
+        if (verification != null && verification.isValid() && verification.code.equals(code)) {
+            verification.isVerified = true;
+            return true;
+        }
+        return false;
+    }
+}
+package com.ankit.a1fastfoodapp;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class CouponHelper {
+    
+    private static Map<String, Coupon> coupons = new HashMap<>();
+    
+    public static class Coupon {
+        public String code;
+        public int discountPercent;
+        public int minOrder;
+        public long expiryDate;
+        public boolean isActive;
+        
+        public Coupon(String code, int discountPercent, int minOrder) {
+            this.code = code;
+            this.discountPercent = discountPercent;
+            this.minOrder = minOrder;
+            this.expiryDate = System.currentTimeMillis() + (7L * 24 * 60 * 60 * 1000); // 7 days
+            this.isActive = true;
+        }
+    }
+    
+    static {
+        // Default coupons
+        coupons.put("WELCOME10", new Coupon("WELCOME10", 10, 100));
+        coupons.put("SAVE20", new Coupon("SAVE20", 20, 200));
+        coupons.put("FREEDEL", new Coupon("FREEDEL", 0, 150));
+    }
+    
+    public static int applyCoupon(String couponCode, int totalAmount) {
+        Coupon coupon = coupons.get(couponCode.toUpperCase());
+        
+        if (coupon != null && coupon.isActive && 
+            System.currentTimeMillis() < coupon.expiryDate && 
+            totalAmount >= coupon.minOrder) {
+            
+            int discount = (totalAmount * coupon.discountPercent) / 100;
+            return totalAmount - discount;
+        }
+        
+        return totalAmount; // No discount
+    }
+}
+package com.ankit.a1fastfoodapp;
+
+import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.pdf.PdfDocument;
+import android.os.Environment;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+
+public class PDFBillGenerator {
+    
+    private Context context;
+    
+    public PDFBillGenerator(Context context) {
+        this.context = context;
+    }
+    
+    public File generateBill(String orderId, List<MenuItem> items, int total, int discount) {
+        PdfDocument pdfDocument = new PdfDocument();
+        Paint paint = new Paint();
+        Paint titlePaint = new Paint();
+        
+        // Page info
+        PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(595, 842, 1).create();
+        PdfDocument.Page page = pdfDocument.startPage(pageInfo);
+        Canvas canvas = page.getCanvas();
+        
+        int y = 50;
+        
+        // Title
+        titlePaint.setTextSize(24);
+        titlePaint.setFakeBoldText(true);
+        titlePaint.setColor(Color.rgb(255, 87, 34)); // Orange
+        canvas.drawText("A1 Fast Food & Restaurant", 50, y, titlePaint);
+        y += 40;
+        
+        // Address
+        paint.setTextSize(12);
+        paint.setColor(Color.BLACK);
+        canvas.drawText("Ekla Aam Chowraha, Bhatni Rd, Alawatpur", 50, y, paint);
+        y += 20;
+        canvas.drawText("Deoria, UP - 274701", 50, y, paint);
+        y += 20;
+        canvas.drawText("FSSAI: 22726266000033", 50, y, paint);
+        y += 30;
+        
+        // Order details
+        paint.setFakeBoldText(true);
+        canvas.drawText("Order ID: " + orderId, 50, y, paint);
+        y += 20;
+        
+        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        canvas.drawText("Date: " + sdf.format(new Date()), 50, y, paint);
+        y += 30;
+        
+        // Table header
+        paint.setColor(Color.rgb(255, 87, 34));
+        paint.setStyle(Paint.Style.FILL);
+        canvas.drawRect(50, y-15, 545, y+15, paint);
+        paint.setColor(Color.WHITE);
+        canvas.drawText("Item", 60, y+5, paint);
+        canvas.drawText("Qty", 300, y+5, paint);
+        canvas.drawText("Price", 400, y+5, paint);
+        canvas.drawText("Total", 480, y+5, paint);
+        y += 30;
+        
+        // Items
+        paint.setColor(Color.BLACK);
+        for (MenuItem item : items) {
+            canvas.drawText(item.name, 60, y, paint);
+            canvas.drawText("1", 320, y, paint);
+            canvas.drawText("₹" + item.price, 400, y, paint);
+            canvas.drawText("₹" + item.price, 480, y, paint);
+            y += 25;
+        }
+        
+        y += 10;
+        
+        // Total
+        paint.setFakeBoldText(true);
+        canvas.drawText("Subtotal: ₹" + total, 400, y, paint);
+        y += 20;
+        
+        if (discount > 0) {
+            canvas.drawText("Discount: -₹" + discount, 400, y, paint);
+            y += 20;
+        }
+        
+        paint.setColor(Color.rgb(255, 87, 34));
+        paint.setTextSize(16);
+        canvas.drawText("Final Total: ₹" + (total - discount), 400, y, paint);
+        y += 40;
+        
+        // Footer
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(12);
+        canvas.drawText("Thank you! Visit Again", 220, y, paint);
+        y += 20;
+        canvas.drawText("This is a computer generated bill", 200, y, paint);
+        
+        // Verification Code
+        y += 30;
+        paint.setColor(Color.rgb(0, 150, 136));
+        paint.setTextSize(18);
+        String verificationCode = VerificationHelper.createVerification(orderId);
+        canvas.drawText("Verification Code: " + verificationCode, 170, y, paint);
+        
+        pdfDocument.finishPage(page);
+        
+        // Save PDF
+        File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        File file = new File(downloadsDir, "A1_Bill_" + orderId + ".pdf");
+        
+        try {
+            pdfDocument.writeTo(new FileOutputStream(file));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        
+        pdfDocument.close();
+        return file;
+    }
+}
+<resources>
+    <!-- Dark Theme -->
+    <style name="Theme.A1FastFoodApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/orange</item>
+        <item name="colorPrimaryVariant">@color/dark_orange</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/teal_200</item>
+        <item name="android:windowBackground">@color/dark_background</item>
+        <item name="android:textColor">@color/white</item>
+    </style>
+</resources>
+<resources>
+    <color name="orange">#FF5722</color>
+    <color name="dark_orange">#E64A19</color>
+    <color name="dark_background">#121212</color>
+    <color name="dark_card">#1E1E1E</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="teal_200">#03DAC5</color>
+</resources>
+package com.ankit.a1fastfoodapp;
+
+import android.os.Bundle;
+import android.widget.TextView;
+import androidx.appcompat.app.AppCompatActivity;
+
+public class PolicyActivity extends AppCompatActivity {
+    
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_policy);
+        
+        TextView tvPolicy = findViewById(R.id.tvPolicy);
+        
+        tvPolicy.setText(
+            "📜 A1 FAST FOOD & RESTAURANT – APP POLICY\n" +
+            "═══════════════════════════════════════\n\n" +
+            
+            "🏢 BUSINESS DETAILS\n" +
+            "──────────────────\n" +
+            "Business Name: A1 Fast Food & Restaurant\n" +
+            "FBO Name: Ankit Chauhan\n" +
+            "Registration No: 22726266000033\n" +
+            "Issued Under: FSS Act, 2006\n" +
+            "Issued By: Department of Food Safety\n" +
+            "           and Drug Administration, UP\n" +
+            "Issued On: 06-02-2026\n" +
+            "Valid Upto: 05-02-2027\n\n" +
+            
+            "📍 BUSINESS ADDRESS\n" +
+            "──────────────────\n" +
+            "Ekla Aam Chowraha, Bhatni Rd,\n" +
+            "Alawatpur, Mayapur,\n" +
+            "Bhatpar Rani Tahsil,\n" +
+            "Deoria, Uttar Pradesh – 274701\n\n" +
+            
+            "🏪 BUSINESS TYPE\n" +
+            "──────────────────\n" +
+            "Petty Retailer of Snacks / Tea Shop\n\n" +
+            
+            "🔐 SECURITY POLICY\n" +
+            "──────────────────\n" +
+            "✓ Only authorized staff can modify menu or stock\n" +
+            "✓ Online ordering allowed only within 50 meters\n" +
+            "  of shop location\n" +
+            "✓ Each order requires one-time verification code\n" +
+            "✓ All transactions are digitally recorded\n" +
+            "✓ Staff login requires biometric verification\n" +
+            "✓ Session automatically expires after 30 minutes\n\n" +
+            
+            "💳 PAYMENT POLICY\n" +
+            "──────────────────\n" +
+            "✓ Cash on Delivery\n" +
+            "✓ UPI Payment (Google Pay, PhonePe, Paytm)\n" +
+            "✓ QR Code Scan & Pay\n" +
+            "✓ Digital receipts with verification code\n\n" +
+            
+            "📊 DATA POLICY\n" +
+            "──────────────────\n" +
+            "✓ We only collect order and location data\n" +
+            "✓ No data shared with third parties\n" +
+            "✓ All data encrypted and stored locally\n" +
+            "✓ Daily backups retained for 30 days\n\n" +
+            
+            "⚡ FEATURES\n" +
+            "──────────────────\n" +
+            "✓ Real-time stock updates\n" +
+            "✓ Low stock warnings\n" +
+            "✓ Daily/Monthly sales reports\n" +
+            "✓ Discount coupons\n" +
+            "✓ Luxury PDF bills\n" +
+            "✓ Dark theme support\n\n" +
+            
+            "📞 CONTACT\n" +
+            "──────────────────\n" +
+            "For support or complaints:\n" +
+            "Phone: +91 XXXXX XXXXX\n" +
+            "Email: a1fastfood@email.com\n\n" +
+            
+            "🔄 LAST UPDATED\n" +
+            "──────────────────\n" +
+            "March 2026\n\n" +
+            
+            "© 2026 A1 Fast Food & Restaurant. All rights reserved."
+        );
+    }
+}
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/dark_background">
+
+    <androidx.appcompat.widget.Toolbar
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/orange"
+        android:title="App Policy"
+        android:titleTextColor="@color/white"
+        android:navigationIcon="?attr/homeAsUpIndicator" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/tvPolicy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="@color/white"
+            android:lineSpacingExtra="6dp" />
+    </ScrollView>
+
+</LinearLayout>![1000145869](https://github.com/user-attachments/assets/8bae5d5d-bd45-4ac4-9c8f-8683518bfda2)
